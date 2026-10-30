@@ -1,0 +1,223 @@
+TurismoUQ · Entrega 2 · Evidencia de pruebas
+Salida de scripts/08_pruebas_entrega2.sql ejecutado en el esquema TURISMOUQ
+Oracle Database 26ai Free (FREEPDB1) · SQL Developer · 2026-10-29
+Resultado: 39 casos PASA, 0 FALLA
+Las tablas de resultados (SELECT) se muestran en capturas aparte.
+==============================================================================
+
+Session altered.
+
+Datos de prueba: habitación 154 (capacidad 3), segunda habitación 135, alojamiento 14, cliente 1
+
+
+PL/SQL procedure successfully completed.
+
+
+===== PRUEBA 1 · fn_valor_estadia =====
+Habitación 154 · 2026-12-12 -> 2026-12-17
+Noche       Cat.   Temporada                                           Tarifa     Acumulado
+2026-12-12  MEDIA  Media de comienzos de diciembre 2026               248,000       248,000
+2026-12-13  MEDIA  Media de comienzos de diciembre 2026               248,000       496,000
+2026-12-14  MEDIA  Media de comienzos de diciembre 2026               248,000       744,000
+2026-12-15  ALTA   Vacaciones de fin de año 2026                      309,000     1,053,000
+2026-12-16  ALTA   Vacaciones de fin de año 2026                      309,000     1,362,000
+fn_valor_estadia = 1,362,000
+
+
+PL/SQL procedure successfully completed.
+
+Habitación 154 · 2025-12-30 -> 2026-01-02
+Noche       Cat.   Temporada                                           Tarifa     Acumulado
+2025-12-30  ALTA   Vacaciones de fin de año 2025                      289,000       289,000
+2025-12-31  ALTA   Vacaciones de fin de año 2025                      289,000       578,000
+2026-01-01  ALTA   Vacaciones de inicio de año 2026                   309,000       887,000
+fn_valor_estadia = 887,000
+
+
+PL/SQL procedure successfully completed.
+
+>>Query Run In:Query Result
+PASA   1.1 Cruce MEDIA->ALTA: 3 x 248000 + 2 x 309000 = 1362000
+PASA   1.2 Una sola temporada: 3 x 248000 = 744000
+PASA   1.3 Cruce de año: 2 x 289000 (2025) + 1 x 309000 (2026) = 887000
+PASA   1.4 Una noche = tarifa de esa noche (309000)
+PASA   1.5 Check-out = check-in  -> ORA-20102: El check-out (2026-12-12) debe ser posterior al check-in (2026-12-12).
+PASA   1.6 Check-out < check-in  -> ORA-20102: El check-out (2026-12-12) debe ser posterior al check-in (2026-12-17).
+PASA   1.7 Fuera del calendario   -> ORA-20106: Solo 2 de 4 noches tienen tarifa: el rango sale del calendario de temporadas cargado.
+PASA   1.8 Habitación inexistente -> ORA-20104: La habitación -1 no existe.
+
+
+PL/SQL procedure successfully completed.
+
+
+===== PRUEBA 2 · sp_crear_reserva =====
+PASA   2.1 Reserva creada: id 30020, estado PENDIENTE, valor 1362000 (= fn_valor_estadia)
+PASA   2.2 No disponible -> ORA-20101: Habitación 154 no disponible del 2026-12-14 al 2026-12-16: se cruza con la reserva 30020 (2026-12-12 a 2026-12-17).
+PASA   2.3 Capturada como pkg_reservas.e_no_disponible
+PASA   2.4 Check-out < check-in -> ORA-20102: El check-out (2026-12-18) debe ser posterior al check-in (2026-12-20).
+PASA   2.5 Check-out = check-in -> ORA-20102: El check-out (2026-12-18) debe ser posterior al check-in (2026-12-18).
+PASA   2.6 Capacidad excedida -> ORA-20103: Capacidad excedida: 4 huéspedes y la habitación 135 admite máximo 3.
+PASA   2.7 Cliente inexistente -> ORA-20105: El cliente -1 no existe.
+PASA   2.8 Check-in en el pasado -> ORA-20107: No se puede reservar con check-in en el pasado (2025-06-01).
+PASA   2.9 Los 7 intentos fallidos no dejaron filas: reservas antes 30001 = después 30001 (incluye la de 2.1)
+PASA   2.10 Reserva 30020 con 2 habitaciones, rango hasta 2026-12-18
+PASA   2.11 Otro alojamiento -> ORA-20110: La habitación 7 no pertenece al alojamiento de la reserva 30020.
+(ROLLBACK: las reservas de prueba se deshicieron)
+
+
+PL/SQL procedure successfully completed.
+
+
+===== PRUEBA 3 · Disparador de fila (solape de reservas) =====
+Reserva A = 30021 (habitación 154, 2026-12-12 a 2026-12-17)
+PASA   3.1 Solape rechazado -> ORA-20120: trg_rh_sin_solape: la habitación 154 ya está reservada entre el 2026-12-15 y el 2026-12-19 por la reserva 30021.
+ORA-06512: at "TURISMOUQ.TRG_RH_SIN_SOLAPE", line 26
+ORA-04088: error during execution of trigger 'TURISMOUQ.TRG_RH_SIN_SOLAPE'
+PASA   3.2 Llegada el día de salida de A: aceptada
+PASA   3.3 Línea de reserva cancelada que se cruza: aceptada
+(ROLLBACK: las reservas de prueba se deshicieron)
+
+
+PL/SQL procedure successfully completed.
+
+
+===== PRUEBA 4 · Disparador de sentencia (auditoría de TARIFA) =====
+PASA   4.1 UPDATE de 2 tarifas -> 2 filas de auditoría de 1 sentencia, con usuario, hora, valor anterior y nuevo
+PASA   4.2 fn_valor_estadia pasó de 1362000 a 1412000 (+5 noches x 10.000)
+PASA   4.3 UPDATE que no cambia el valor: 0 filas de auditoría
+PASA   4.4 Tarifas restauradas: valor vuelve a 1362000
+
+
+PL/SQL procedure successfully completed.
+
+>>Query Run In:Query Result 1
+
+===== PRUEBA 5 · Liquidación mensual (cursor con parámetros) =====
+LIQUIDACIÓN 2025-12 · comisión plataforma 12 %
+Municipio    Alojamiento                           Res.  Noches          Bruto      Comisión           Neto
+Armenia      Ecohotel Bosques del Edén               30      87     66,718,000     8,006,160     58,711,840
+Armenia      Finca Hotel El Jardín Armenia            6      12      6,677,000       801,240      5,875,760
+Armenia      Hostal Café Armenia                     15      47      4,126,000       495,120      3,630,880
+Armenia      Hostal El Viajero Cafetero               9      15      1,133,000       135,960        997,040
+Armenia      Hostal Norte Verde                       2       7        468,000        56,160        411,840
+Armenia      Hotel Avenida Bolívar                   20      61     18,318,000     2,198,160     16,119,840
+Armenia      Hotel Bolívar Centro                    48     153     53,221,400     6,386,568     46,834,832
+Armenia      Hotel Boutique Los Fundadores           20      54     23,175,000     2,781,000     20,394,000
+Armenia      Hotel Ciudad Milagro                    24      70     28,231,000     3,387,720     24,843,280
+Armenia      Hotel Gran Armenia Plaza                56     148     34,833,600     4,180,032     30,653,568
+Armenia      Hotel Parque Sucre                      20      50     20,504,000     2,460,480     18,043,520
+Buenavista   Glamping Mirador de Buenavista           8      34     22,105,000     2,652,600     19,452,400
+Calarcá      Ecohotel Alas del Quindío               13      31     15,271,000     1,832,520     13,438,480
+Calarcá      Finca Alto de la Cruz                    9      30     11,081,000     1,329,720      9,751,280
+Calarcá      Finca El Recreo Calarcá                  6      27     11,387,000     1,366,440     10,020,560
+Calarcá      Hotel Campestre Las Orquídeas           18      55     20,717,000     2,486,040     18,230,960
+Calarcá      Hotel Villa Calarcá                     13      36      7,800,000       936,000      6,864,000
+Circasia     Finca El Mirador de Circasia             9      33     15,725,000     1,887,000     13,838,000
+Circasia     Finca Hotel Villa Nora                  15      40     26,864,600     3,223,752     23,640,848
+Circasia     Glamping Lagos de Circasia              16      82     59,064,800     7,087,776     51,977,024
+Circasia     Hotel Plaza de Circasia                 18      44     11,459,600     1,375,152     10,084,448
+Córdoba      Finca La Guadua de Córdoba               4       6      2,437,000       292,440      2,144,560
+Filandia     Finca Bambusa Filandia                   7      20     15,209,000     1,825,080     13,383,920
+Filandia     Finca La Cristalina                     10      27     16,074,000     1,928,880     14,145,120
+Filandia     Glamping Cielo Abierto Filandia         13      43     26,761,000     3,211,320     23,549,680
+Filandia     Glamping Mirador Colina Iluminada       19      59     46,380,000     5,565,600     40,814,400
+Filandia     Hostal Bahareque Filandia               11      34      2,829,600       339,552      2,490,048
+Filandia     Hostal Mirador del Quindío              22      60      6,982,000       837,840      6,144,160
+Filandia     Hotel Colina Iluminada                  41     124     53,218,000     6,386,160     46,831,840
+Génova       Finca El Cedral de Génova                1       3        786,000        94,320        691,680
+La Tebaida   Finca El Paraíso Tebaida                 3       9      5,108,000       612,960      4,495,040
+La Tebaida   Hotel Aeropuerto El Edén                 9      41     11,991,400     1,438,968     10,552,432
+Montenegro   Ecohotel Guadual del Café               18      39     28,330,000     3,399,600     24,930,400
+Montenegro   Finca El Cafetal de Pueblo Tapao        15      55     19,704,000     2,364,480     17,339,520
+Montenegro   Finca Hotel Los Guaduales               20      52     24,229,000     2,907,480     21,321,520
+Montenegro   Finca La Morelia                        15      37     16,650,600     1,998,072     14,652,528
+Montenegro   Finca Villa Café Montenegro             12      47     23,277,000     2,793,240     20,483,760
+Montenegro   Glamping Las Heliconias                 21      46     32,053,000     3,846,360     28,206,640
+Montenegro   Hotel Campestre Pueblo Tapao            48     141     47,304,600     5,676,552     41,628,048
+Montenegro   Hotel Montenegro Real                   26      88     34,457,000     4,134,840     30,322,160
+Pijao        Hostal Pijao Ciudad Lenta               14      28      3,261,000       391,320      2,869,680
+Quimbaya     Finca Cafetera Las Acacias               9      20     16,498,000     1,979,760     14,518,240
+Quimbaya     Finca El Balso                           2      16      5,600,000       672,000      4,928,000
+Quimbaya     Finca Hotel La Esperanza                12      26     14,707,600     1,764,912     12,942,688
+Quimbaya     Glamping Río La Vieja                    8      20     14,143,000     1,697,160     12,445,840
+Quimbaya     Hostal Alumbrados Quimbaya              16      31      3,582,400       429,888      3,152,512
+Quimbaya     Hotel Campestre Los Arrieros            32     102     51,239,400     6,148,728     45,090,672
+Quimbaya     Hotel Quimbaya Plaza                    24      67     29,707,000     3,564,840     26,142,160
+Salento      Domos del Cocora                        13      38     25,299,000     3,035,880     22,263,120
+Salento      Ecohotel Senderos de Cocora             14      45     30,531,000     3,663,720     26,867,280
+Salento      Finca Cafetera La Serrana               22      50     34,222,000     4,106,640     30,115,360
+Salento      Finca Don Eduardo Café                  15      48     16,464,800     1,975,776     14,489,024
+Salento      Finca El Ocobo                          12      37     18,453,400     2,214,408     16,238,992
+Salento      Glamping Bosque de Niebla               25      60     55,547,000     6,665,640     48,881,360
+Salento      Glamping Mirador Quindío                18      48     39,421,000     4,730,520     34,690,480
+Salento      Hostal Bahareque                        12      37      3,992,000       479,040      3,512,960
+Salento      Hostal Camino Real                      23      49      3,199,800       383,976      2,815,824
+Salento      Hostal La Floresta Real                 29      75      8,168,000       980,160      7,187,840
+Salento      Hostal Plaza Bolívar Salento            34      89      6,962,400       835,488      6,126,912
+Salento      Hotel Palma de Cera                     44     129     48,546,000     5,825,520     42,720,480
+TOTAL (60 alojamientos)                                          1,302,206,000   156,264,720  1,145,941,280
+
+
+PL/SQL procedure successfully completed.
+
+PASA   5.1 Una fila por alojamiento: 60
+PASA   5.2 Ingreso por estadía cuadra con la consulta directa: 1034590000 = 1034590000
+PASA   5.3 bruto = estadía + servicios + cancelaciones y neto = bruto - comisión en todas las filas
+LIQUIDACIÓN 2025-12 · comisión plataforma 12 %
+Municipio    Alojamiento                           Res.  Noches          Bruto      Comisión           Neto
+Armenia      Hotel Bolívar Centro                    48     153     53,221,400     6,386,568     46,834,832
+TOTAL (1 alojamientos)                                              53,221,400     6,386,568     46,834,832
+PASA   5.4 Re-ejecución para el alojamiento 14: siguen 60 filas, sin duplicados
+PASA   5.5 Periodo inválido -> ORA-20113: Periodo inválido: año 2025, mes 13.
+
+
+PL/SQL procedure successfully completed.
+
+>>Query Run In:Query Result 2
+
+===== PRUEBA 6 · Paquete PKG_RESERVAS =====
+>>Query Run In:Query Result 3
+>>Query Run In:Query Result 4
+
+===== PRUEBA 7 · Tablespace TS_TURISMOUQ_HIST =====
+PASA   7.1 HIST_RESERVA está en TS_TURISMOUQ_HIST
+Archivadas 0 líneas de reserva cerradas antes del 2025-01-01 en TS_TURISMOUQ_HIST.
+PASA   7.2 Re-archivar 2024 no duplica: 16988 = 16988
+Archivadas 0 líneas de reserva cerradas antes del 2025-07-01 en TS_TURISMOUQ_HIST.
+PASA   7.3 Archivo hasta 2025-07-01: faltaban 0, histórico 16988 -> 16988
+PASA   7.4 No queda ninguna línea cerrada antes del 2025-07-01 sin archivar
+
+
+PL/SQL procedure successfully completed.
+
+>>Query Run In:Query Result 5
+>>Query Run In:Query Result 6
+
+===== PRUEBA 8 · Vista materializada MV_OCUPACION_MENSUAL =====
+>>Query Run In:Query Result 7
+>>Query Run In:Query Result 8
+>>Query Run In:Query Result 9
+>>Query Run In:Query Result 10
+Elapsed: 00:00:03.138
+>>Query Run In:Query Result 11
+Elapsed: 00:00:00.134
+
+0 rows deleted.
+
+
+Explained.
+
+
+Explained.
+
+>>Query Run In:Query Result 12
+PASA   8.1 Recién refrescada coincide con el cálculo en vivo: 75
+PASA   8.2 Tras confirmar la reserva 30024: vista 75 (desactualizada), en vivo 80
+PASA   8.3 Después de DBMS_MVIEW.REFRESH la vista muestra 80
+PASA   8.4 Reserva de prueba eliminada y vista refrescada: 75
+
+
+PL/SQL procedure successfully completed.
+
+
+=== 08_pruebas_entrega2.sql terminado: busque FALLA en la salida ===
